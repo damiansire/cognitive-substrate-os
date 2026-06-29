@@ -1,0 +1,37 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "references": [
+    {
+      "path": "../engine"
+    },
+    {
+      "path": "../gemini-agent-loop"
+    },
+    {
+      "path": "../governance"
+    },
+    {
+      "path": "../sandbox-browser"
+    },
+    {
+      "path": "../sandbox-fs"
+    },
+    {
+      "path": "../sandbox-terminal"
+    },
+    {
+      "path": "../skills-parser"
+    }
+  ]
+}

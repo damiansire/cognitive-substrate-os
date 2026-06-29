@@ -1,0 +1,38 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/governance"
+    },
+    {
+      "path": "./packages/sandbox-fs"
+    },
+    {
+      "path": "./packages/sandbox-terminal"
+    },
+    {
+      "path": "./packages/sandbox-container"
+    },
+    {
+      "path": "./packages/sandbox-browser"
+    },
+    {
+      "path": "./packages/gemini-agent-loop"
+    },
+    {
+      "path": "./packages/skills-parser"
+    },
+    {
+      "path": "./packages/engine"
+    },
+    {
+      "path": "./packages/evals"
+    },
+    {
+      "path": "./apps/cli"
+    },
+    {
+      "path": "./apps/coordinator"
+    }
+  ]
+}

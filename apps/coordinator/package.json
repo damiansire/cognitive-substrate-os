@@ -1,0 +1,11 @@
+{
+  "name": "@cognitive-substrate/coordinator",
+  "version": "1.0.0",
+  "private": true,
+  "bin": {
+    "cognitive-coordinator": "./dist/index.js"
+  },
+  "dependencies": {
+    "@cognitive-substrate/engine": "*"
+  }
+}

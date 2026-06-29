@@ -1,0 +1,60 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Entorno y Secretos (CRÍTICO)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Dependencias Node
+node_modules/
+jspm_packages/
+
+# Binarios / Compilación
+dist/
+build/
+out/
+target/
+
+# TypeScript
+*.tsbuildinfo
+
+# Artefactos compilados emitidos junto al código fuente (deben vivir solo en dist/)
+packages/**/src/**/*.js
+packages/**/src/**/*.d.ts
+packages/**/src/**/*.d.ts.map
+apps/**/src/**/*.js
+apps/**/src/**/*.d.ts
+apps/**/src/**/*.d.ts.map
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Datos Dinámicos del OS Agentic
+# Ignorar el contenido dinámico de los workspaces, pero mantener la carpeta
+workspaces/*
+!workspaces/.gitkeep
+
+# Archivos auto-generados por el OS
+dashboard.md
+local_dashboard.md
+apps/presentation/
+evals-report/
+
+# Claude Code (no commitear nada relacionado con Claude)
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.mcp.json
+claude-scratch-*

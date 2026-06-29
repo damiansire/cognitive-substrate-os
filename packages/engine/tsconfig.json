@@ -1,0 +1,25 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "references": [
+    {
+      "path": "../gemini-agent-loop"
+    },
+    {
+      "path": "../sandbox-fs"
+    },
+    {
+      "path": "../governance"
+    }
+  ]
+}

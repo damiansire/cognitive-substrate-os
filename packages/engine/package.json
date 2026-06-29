@@ -1,0 +1,13 @@
+{
+  "name": "@cognitive-substrate/engine",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "commonjs",
+  "sideEffects": false,
+  "dependencies": {
+    "@cognitive-substrate/gemini-agent-loop": "*",
+    "@cognitive-substrate/sandbox-fs": "*",
+    "@cognitive-substrate/governance": "*"
+  }
+}

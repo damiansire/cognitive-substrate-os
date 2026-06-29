@@ -1,0 +1,34 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "references": [
+    {
+      "path": "../sandbox-fs"
+    },
+    {
+      "path": "../sandbox-terminal"
+    },
+    {
+      "path": "../sandbox-container"
+    },
+    {
+      "path": "../sandbox-browser"
+    },
+    {
+      "path": "../skills-parser"
+    },
+    {
+      "path": "../governance"
+    }
+  ]
+}

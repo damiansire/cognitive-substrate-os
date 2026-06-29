@@ -1,0 +1,246 @@
+import { GoogleGenAI, type Part, type PartListUnion } from '@google/genai';
+import { toolDeclarations } from './schemas';
+import { fsTools, resolveInsideWorkspace } from '@cognitive-substrate/sandbox-fs';
+import { terminalTools } from '@cognitive-substrate/sandbox-terminal';
+import { containerTools } from '@cognitive-substrate/sandbox-container';
+import { browserTools, BrowserSession } from '@cognitive-substrate/sandbox-browser';
+import { discoverSkills, readSkillContent } from '@cognitive-substrate/skills-parser';
+import { type Policy, loadPolicy, decideCommand, decideUrl, appendAudit, Budget } from '@cognitive-substrate/governance';
+
+import { recordLlmCall } from './metrics';
+
+export { generateJson, hasApiKey, DEFAULT_MODEL } from './client';
+export { getLlmCalls, resetLlmCalls, recordLlmCall } from './metrics';
+
+const MAX_TOOL_ITERATIONS = 15;
+const MAX_BACKOFF_ATTEMPTS = 3;
+
+/**
+ * Dispatches a single tool call to its sandboxed implementation, applying governance:
+ * the terminal goes through the approval gate, and every invocation is audited.
+ * All tools are confined to `workspacePath`. Returns a human/model-readable string.
+ */
+async function dispatchTool(
+    workspacePath: string,
+    name: string | undefined,
+    args: any,
+    policy: Policy,
+    browser: BrowserSession
+): Promise<string> {
+    switch (name) {
+        case 'readFile':
+            appendAudit(workspacePath, { tool: 'readFile', allowed: true, detail: args?.filepath });
+            return fsTools.readFile(workspacePath, args);
+        case 'writeFile':
+            appendAudit(workspacePath, { tool: 'writeFile', allowed: true, detail: args?.filepath });
+            return fsTools.writeFile(workspacePath, args);
+        case 'listFiles':
+            appendAudit(workspacePath, { tool: 'listFiles', allowed: true, detail: args?.dirpath });
+            return fsTools.listFiles(workspacePath, args);
+        case 'runCommand': {
+            // Approval gate: dangerous commands are denied in autonomous mode.
+            const decision = decideCommand(args?.command ?? '', policy);
+            appendAudit(workspacePath, {
+                tool: 'runCommand',
+                allowed: decision.allowed,
+                reason: decision.reason,
+                command: args?.command
+            });
+            if (!decision.allowed) {
+                return `Bloqueado por governance: ${decision.reason}. Si era necesario, ajustá governance.json o pedí aprobación humana.`;
+            }
+            // Execution surface chosen by policy: isolated container or native host shell.
+            return policy.terminal === 'container'
+                ? containerTools.runCommand(workspacePath, args)
+                : terminalTools.runCommand(workspacePath, args);
+        }
+        case 'fetchUrl': {
+            // Egress gate: only domains in browserAllowDomains may be fetched (deny-all default).
+            const url = args?.url ?? '';
+            const urlDecision = decideUrl(url, policy);
+            appendAudit(workspacePath, { tool: 'fetchUrl', allowed: urlDecision.allowed, reason: urlDecision.reason, detail: url });
+            if (!urlDecision.allowed) {
+                return `Bloqueado por governance: ${urlDecision.reason}. Agregá el dominio a browserAllowDomains en governance.json si corresponde.`;
+            }
+            return browserTools.fetchText(url);
+        }
+        case 'browserNavigate': {
+            const url = args?.url ?? '';
+            const urlDecision = decideUrl(url, policy);
+            appendAudit(workspacePath, { tool: 'browserNavigate', allowed: urlDecision.allowed, reason: urlDecision.reason, detail: url });
+            if (!urlDecision.allowed) {
+                return `Bloqueado por governance: ${urlDecision.reason}.`;
+            }
+            return browser.navigate(url);
+        }
+        case 'browserReadText':
+            appendAudit(workspacePath, { tool: 'browserReadText', allowed: true });
+            return browser.readText();
+        case 'browserClick':
+            appendAudit(workspacePath, { tool: 'browserClick', allowed: true, detail: args?.selector });
+            return browser.click(args?.selector ?? '');
+        case 'browserType':
+            appendAudit(workspacePath, { tool: 'browserType', allowed: true, detail: args?.selector });
+            return browser.type(args?.selector ?? '', args?.text ?? '');
+        case 'browserScreenshot': {
+            // Screenshot path must stay inside the workspace (same containment as fs tools).
+            try {
+                const abs = resolveInsideWorkspace(workspacePath, args?.filepath ?? 'screenshot.png');
+                appendAudit(workspacePath, { tool: 'browserScreenshot', allowed: true, detail: args?.filepath });
+                return await browser.screenshot(abs);
+            } catch (e: any) {
+                return `Error de Seguridad: ${e?.message ?? 'ruta inválida'}`;
+            }
+        }
+        case 'readSkill':
+            appendAudit(workspacePath, { tool: 'readSkill', allowed: true, detail: args?.path });
+            return readSkillContent(workspacePath, args?.path);
+        default:
+            return `Error: Herramienta desconocida ${name}`;
+    }
+}
+
+/**
+ * Executes a task using the LLM with exponential backoff for rate limits.
+ * Handles the MemGPT memory pattern, tool calling, and strict workspace context.
+ *
+ * @param workspacePath - The absolute path to the current project workspace.
+ * @param task - The string representation of the task to complete.
+ * @param coreMemory - The immediate context/memory to inject into the system prompt.
+ * @returns A promise resolving to an object containing success status and a detailed log.
+ */
+export async function executeTaskWithLLM(workspacePath: string, task: string, coreMemory: string): Promise<{ success: boolean; log: string }> {
+    if (!process.env['GEMINI_API_KEY'] || process.env['GEMINI_API_KEY'].includes('tu_clave_aqui')) {
+        console.warn(`>>> [LLM] GEMINI_API_KEY no válida. Simulación activada para ${workspacePath}`);
+        return { success: true, log: "Simulated success (No API Key)" };
+    }
+
+    const policy = loadPolicy(workspacePath);
+    const budget = new Budget(policy);
+    const ai = new GoogleGenAI({ apiKey: process.env['GEMINI_API_KEY'] });
+    const availableSkills = discoverSkills(workspacePath);
+    const skillsListText = availableSkills.map((s) => `- ${s.name}: ${s.description} (path: ${s.path})`).join('\n');
+
+    // PATRÓN MEMGPT: Core Memory (System Prompt) vs Archival Memory (knowledge.md consultable vía tools)
+    const systemInstruction = `
+Eres el motor central del Cognitive Substrate OS operando como Global Daemon.
+Estás aislado en el siguiente workspace (proyecto):
+WORKSPACE_PATH: ${workspacePath}
+
+Tu objetivo es resolver la tarea asignada por la cola [now].
+Tienes acceso a herramientas de sistema de archivos y terminal. Todas tus herramientas operan ESTRICTAMENTE dentro de WORKSPACE_PATH. Las rutas que proporciones a las herramientas deben ser relativas a este workspace.
+
+SKILLS (HABILIDADES) DISPONIBLES:
+Tienes las siguientes habilidades globales y locales descubiertas dinámicamente. Si alguna te sirve para resolver la tarea, usa la herramienta 'readSkill(path)' pasando el path exacto para leer las instrucciones completas antes de actuar.
+${skillsListText || 'No se encontraron skills.'}
+
+CORE MEMORY (Contexto Inmediato):
+${coreMemory}
+
+Si necesitas contexto histórico de este proyecto, usa la herramienta readFile para leer 'knowledge.md'.
+Sigue estos pasos estrictamente:
+1. Analiza la tarea.
+2. Utiliza las herramientas necesarias para completarla.
+3. Si logras el objetivo, devuelve tu último mensaje explicando qué hiciste.
+`;
+
+    console.log(`>>> [LLM] Delegando tarea en workspace ${workspacePath}: ${task}`);
+
+    let chat;
+    try {
+        chat = ai.chats.create({
+            model: 'gemini-2.5-flash',
+            config: {
+                systemInstruction: systemInstruction,
+                tools: [{ functionDeclarations: toolDeclarations as any }],
+                temperature: 0.2
+            }
+        });
+    } catch (e: any) {
+        return { success: false, log: `Error inicializando chat: ${e.message}` };
+    }
+
+    let nextMessage: PartListUnion = `Ejecuta la siguiente tarea:\n${task}`;
+    let success = false;
+    let log = "";
+    const browser = new BrowserSession();
+
+    try {
+        for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
+            let response;
+            let attempts = 0;
+
+            // Bounded autonomy: stop if the per-task model budget is exhausted.
+            if (!budget.canCallLlm()) {
+                log += `\n[Governance] Budget de LLM agotado (${budget.spentLlm}/${policy.maxLlmCallsPerTask}). Deteniendo.`;
+                break;
+            }
+
+            // Exponential Backoff implementation (G-Staff Pattern)
+            while (attempts < MAX_BACKOFF_ATTEMPTS) {
+                try {
+                    recordLlmCall();
+                    budget.recordLlm();
+                    response = await chat.sendMessage({ message: nextMessage });
+                    break;
+                } catch (apiError: any) {
+                    attempts++;
+                    const status = apiError.status || 500;
+                    if (status === 429 || status === 503) {
+                        if (attempts >= MAX_BACKOFF_ATTEMPTS) {
+                            return { success: false, log: log + `\nError Crítico: Falla de Red/Rate Limit persistente (${status}).` };
+                        }
+                        const waitTime = Math.pow(2, attempts) * 1000;
+                        console.warn(`>>> [LLM] Rate Limit (${status}) detectado. Reintentando en ${waitTime}ms...`);
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
+                    } else {
+                        throw apiError;
+                    }
+                }
+            }
+
+            if (!response) break;
+
+            log += `\n[Agent]: ${response.text || "Tool Call"}`;
+
+            const calls = response.functionCalls;
+            if (calls && calls.length > 0) {
+                // Reinject tool results as proper functionResponse parts (NOT a stringified
+                // text message). This is what the Gemini function-calling contract expects so
+                // the model can match each result to the call it made.
+                const toolResponseParts: Part[] = [];
+
+                for (const call of calls) {
+                    const args = call.args as any;
+                    console.log(`>>> [LLM Tool] Invocando ${call.name}(${JSON.stringify(args)}) en ${workspacePath}`);
+
+                    let result: string;
+                    if (!budget.canCallTool()) {
+                        result = `Bloqueado por governance: budget de herramientas agotado (${budget.spentTools}/${policy.maxToolCallsPerTask}).`;
+                    } else {
+                        budget.recordTool();
+                        result = await dispatchTool(workspacePath, call.name, args, policy, browser);
+                    }
+
+                    toolResponseParts.push({
+                        functionResponse: {
+                            id: call.id,
+                            name: call.name,
+                            response: { output: result }
+                        }
+                    });
+                }
+                nextMessage = toolResponseParts;
+            } else {
+                success = true;
+                break;
+            }
+        }
+        return { success, log };
+    } catch (e: any) {
+        console.error(">>> [LLM Error]:", e);
+        return { success: false, log: `Excepción durante ejecución: ${e.message}` };
+    } finally {
+        await browser.close();
+    }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@cognitive-substrate/gemini-agent-loop",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "commonjs",
+  "sideEffects": false,
+  "dependencies": {
+    "@google/genai": "^2.10.0",
+    "@cognitive-substrate/sandbox-fs": "*",
+    "@cognitive-substrate/sandbox-terminal": "*",
+    "@cognitive-substrate/sandbox-container": "*",
+    "@cognitive-substrate/sandbox-browser": "*",
+    "@cognitive-substrate/skills-parser": "*",
+    "@cognitive-substrate/governance": "*"
+  }
+}

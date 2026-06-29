@@ -1,0 +1,14 @@
+{
+  "name": "cognitive-substrate-os",
+  "version": "1.1.0",
+  "bin": {
+    "cognitive-os": "./dist/index.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "@cognitive-substrate/engine": "*"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs --target es2022 --clean --minify"
+  }
+}

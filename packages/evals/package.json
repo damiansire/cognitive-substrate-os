@@ -1,0 +1,17 @@
+{
+  "name": "@cognitive-substrate/evals",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "commonjs",
+  "sideEffects": false,
+  "dependencies": {
+    "@cognitive-substrate/engine": "*",
+    "@cognitive-substrate/gemini-agent-loop": "*",
+    "@cognitive-substrate/governance": "*",
+    "@cognitive-substrate/sandbox-browser": "*",
+    "@cognitive-substrate/sandbox-fs": "*",
+    "@cognitive-substrate/sandbox-terminal": "*",
+    "@cognitive-substrate/skills-parser": "*"
+  }
+}
