@@ -34,7 +34,10 @@ export function decideCommand(command: string, policy: Policy): Decision {
     const classification = classifyCommand(command);
     if (classification.risk === 'dangerous') {
         if (policy.mode === 'allow') {
-            return { allowed: true, reason: `comando peligroso (${classification.matched}) permitido por mode='allow'` };
+            return {
+                allowed: true,
+                reason: `comando peligroso (${classification.matched}) permitido por mode='allow'`
+            };
         }
         return {
             allowed: false,

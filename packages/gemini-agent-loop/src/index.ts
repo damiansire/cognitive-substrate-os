@@ -5,7 +5,14 @@ import { terminalTools } from '@cognitive-substrate/sandbox-terminal';
 import { containerTools } from '@cognitive-substrate/sandbox-container';
 import { browserTools, BrowserSession } from '@cognitive-substrate/sandbox-browser';
 import { discoverSkills, readSkillContent } from '@cognitive-substrate/skills-parser';
-import { type Policy, loadPolicy, decideCommand, decideUrl, appendAudit, Budget } from '@cognitive-substrate/governance';
+import {
+    type Policy,
+    loadPolicy,
+    decideCommand,
+    decideUrl,
+    appendAudit,
+    Budget
+} from '@cognitive-substrate/governance';
 
 import { recordLlmCall } from './metrics';
 
@@ -58,7 +65,12 @@ async function dispatchTool(
             // Egress gate: only domains in browserAllowDomains may be fetched (deny-all default).
             const url = args?.url ?? '';
             const urlDecision = decideUrl(url, policy);
-            appendAudit(workspacePath, { tool: 'fetchUrl', allowed: urlDecision.allowed, reason: urlDecision.reason, detail: url });
+            appendAudit(workspacePath, {
+                tool: 'fetchUrl',
+                allowed: urlDecision.allowed,
+                reason: urlDecision.reason,
+                detail: url
+            });
             if (!urlDecision.allowed) {
                 return `Bloqueado por governance: ${urlDecision.reason}. Agregá el dominio a browserAllowDomains en governance.json si corresponde.`;
             }
@@ -67,7 +79,12 @@ async function dispatchTool(
         case 'browserNavigate': {
             const url = args?.url ?? '';
             const urlDecision = decideUrl(url, policy);
-            appendAudit(workspacePath, { tool: 'browserNavigate', allowed: urlDecision.allowed, reason: urlDecision.reason, detail: url });
+            appendAudit(workspacePath, {
+                tool: 'browserNavigate',
+                allowed: urlDecision.allowed,
+                reason: urlDecision.reason,
+                detail: url
+            });
             if (!urlDecision.allowed) {
                 return `Bloqueado por governance: ${urlDecision.reason}.`;
             }
@@ -109,10 +126,14 @@ async function dispatchTool(
  * @param coreMemory - The immediate context/memory to inject into the system prompt.
  * @returns A promise resolving to an object containing success status and a detailed log.
  */
-export async function executeTaskWithLLM(workspacePath: string, task: string, coreMemory: string): Promise<{ success: boolean; log: string }> {
+export async function executeTaskWithLLM(
+    workspacePath: string,
+    task: string,
+    coreMemory: string
+): Promise<{ success: boolean; log: string }> {
     if (!process.env['GEMINI_API_KEY'] || process.env['GEMINI_API_KEY'].includes('tu_clave_aqui')) {
         console.warn(`>>> [LLM] GEMINI_API_KEY no válida. Simulación activada para ${workspacePath}`);
-        return { success: true, log: "Simulated success (No API Key)" };
+        return { success: true, log: 'Simulated success (No API Key)' };
     }
 
     const policy = loadPolicy(workspacePath);
@@ -177,7 +198,7 @@ Sigue estos pasos estrictamente:
 
     let nextMessage: PartListUnion = `Ejecuta la siguiente tarea:\n${task}`;
     let success = false;
-    let log = "";
+    let log = '';
     const browser = new BrowserSession();
 
     try {
@@ -203,11 +224,14 @@ Sigue estos pasos estrictamente:
                     const status = apiError.status || 500;
                     if (status === 429 || status === 503) {
                         if (attempts >= MAX_BACKOFF_ATTEMPTS) {
-                            return { success: false, log: log + `\nError Crítico: Falla de Red/Rate Limit persistente (${status}).` };
+                            return {
+                                success: false,
+                                log: log + `\nError Crítico: Falla de Red/Rate Limit persistente (${status}).`
+                            };
                         }
                         const waitTime = Math.pow(2, attempts) * 1000;
                         console.warn(`>>> [LLM] Rate Limit (${status}) detectado. Reintentando en ${waitTime}ms...`);
-                        await new Promise(resolve => setTimeout(resolve, waitTime));
+                        await new Promise((resolve) => setTimeout(resolve, waitTime));
                     } else {
                         throw apiError;
                     }
@@ -216,7 +240,7 @@ Sigue estos pasos estrictamente:
 
             if (!response) break;
 
-            log += `\n[Agent]: ${response.text || "Tool Call"}`;
+            log += `\n[Agent]: ${response.text || 'Tool Call'}`;
 
             const calls = response.functionCalls;
             if (calls && calls.length > 0) {
@@ -253,7 +277,7 @@ Sigue estos pasos estrictamente:
         }
         return { success, log };
     } catch (e: any) {
-        console.error(">>> [LLM Error]:", e);
+        console.error('>>> [LLM Error]:', e);
         return { success: false, log: `Excepción durante ejecución: ${e.message}` };
     } finally {
         await browser.close();

@@ -22,12 +22,30 @@ function promptAsync(rl: readline.Interface, question: string): Promise<string> 
 // propia infraestructura del OS. Mover ciegamente todo el cwd (como hacía la versión
 // original) podía destruir el directorio del usuario.
 const PROTECTED_FROM_MOVE = new Set([
-    'workspaces', 'node_modules', '.git', '.gitignore',
-    'package.json', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock',
-    '.env', '.env.example', '.env.local',
-    'tsconfig.json', 'tsconfig.base.json', 'tsconfig.tsbuildinfo',
-    'apps', 'packages', 'dist', 'build', 'out', 'target',
-    'README.md', 'LICENSE', 'docs', '.claude'
+    'workspaces',
+    'node_modules',
+    '.git',
+    '.gitignore',
+    'package.json',
+    'package-lock.json',
+    'pnpm-lock.yaml',
+    'yarn.lock',
+    '.env',
+    '.env.example',
+    '.env.local',
+    'tsconfig.json',
+    'tsconfig.base.json',
+    'tsconfig.tsbuildinfo',
+    'apps',
+    'packages',
+    'dist',
+    'build',
+    'out',
+    'target',
+    'README.md',
+    'LICENSE',
+    'docs',
+    '.claude'
 ]);
 
 function moveProjectToWorkspace(workspacesDir: string, projectName: string): string {
@@ -79,7 +97,10 @@ async function runInteractiveWizard(): Promise<void> {
         rl.close();
         reportResults(await tickLocal(process.cwd()));
     } else if (option.trim() === '2') {
-        const action = await promptAsync(rl, '\n🤖 ¿Deseas [A]gregar el proyecto actual al workspace o [N]uevo proyecto vacío? (A/N): ');
+        const action = await promptAsync(
+            rl,
+            '\n🤖 ¿Deseas [A]gregar el proyecto actual al workspace o [N]uevo proyecto vacío? (A/N): '
+        );
         const projectName = await promptAsync(rl, 'Nombre del proyecto: ');
         const task = await promptAsync(rl, '¿Qué quieres que construya hoy?: ');
 

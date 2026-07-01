@@ -66,9 +66,7 @@ export function recordRun(input: RecordRunInput): RunRecord {
 
 function renderSummary(r: RunRecord): string {
     const status = r.verdict.verified ? '✅ VERIFICADO' : '❌ NO VERIFICADO';
-    const checks = r.verdict.checks
-        .map((c) => `  - ${c.passed ? '✓' : '✗'} **${c.name}**: ${c.detail}`)
-        .join('\n');
+    const checks = r.verdict.checks.map((c) => `  - ${c.passed ? '✓' : '✗'} **${c.name}**: ${c.detail}`).join('\n');
     return [
         `# Run: ${r.task.trim()}`,
         '',

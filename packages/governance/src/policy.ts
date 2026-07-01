@@ -70,7 +70,9 @@ export function loadPolicy(rootDir: string): Policy {
             maxLlmCallsPerTask:
                 typeof raw.maxLlmCallsPerTask === 'number' ? raw.maxLlmCallsPerTask : defaultPolicy.maxLlmCallsPerTask,
             maxToolCallsPerTask:
-                typeof raw.maxToolCallsPerTask === 'number' ? raw.maxToolCallsPerTask : defaultPolicy.maxToolCallsPerTask,
+                typeof raw.maxToolCallsPerTask === 'number'
+                    ? raw.maxToolCallsPerTask
+                    : defaultPolicy.maxToolCallsPerTask,
             browserAllowDomains: Array.isArray(raw.browserAllowDomains) ? raw.browserAllowDomains.map(String) : [],
             coordination:
                 raw.coordination && raw.coordination.mode === 'http'
