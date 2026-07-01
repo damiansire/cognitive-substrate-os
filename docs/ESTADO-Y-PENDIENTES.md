@@ -46,6 +46,31 @@ techo de acá en adelante lo pone el **uso real**, no más arquitectura.
       justifique** (evitar volver a "promete mucho, hace poco").
 - [ ] Mantener `ARCHITECTURE.md` honesto en cada cambio: lo implementado vs. el roadmap.
 
+### D. Higiene de pipeline (descubierto en auditoría del 2026-06-30 — resuelto el mismo día)
+Estaba sin cubrir porque el BUILD ORDER original no lo pedía en ningún paso (ver
+[`12-plan-de-construccion.md`](./vision/12-plan-de-construccion.md), ya actualizado con
+una sección transversal de higiene de pipeline para que no se repita). Cerrado así:
+
+- [x] **CI**: `.github/workflows/ci.yml` corre `typecheck` + `lint` + `format:check` +
+      `test` en cada push/PR a `master`/`main`.
+- [x] **Linter/formatter**: ESLint (flat config, `eslint.config.mjs`) + Prettier
+      (`.prettierrc.json`) configurados en la raíz, cubriendo todo el monorepo. El
+      `no-explicit-any` quedó en `warn` (hay ~30 usos preexistentes en bordes de SDK
+      como Gemini/Docker/Playwright) — no bloquea CI, pero evita que se sumen más.
+- [x] **Script `typecheck` roto**: era `"tsc --build --noEmit"`, incompatible con
+      project references compuestas (composite necesita emitir `.d.ts` para que los
+      paquetes downstream resuelvan tipos vía `dist/`). Pasó a `"tsc --build"` — el
+      type-check ya ocurre durante el build mismo; un build exitoso garantiza tipos
+      correctos en este setup.
+- ~~Distinguir modo simulación vs. real en los reportes~~ — **no era un gap real**: el
+  reporte (`packages/evals/src/report.ts:12`) ya incluye `**Modo:** simulación (sin API
+  key)` / `en vivo`. La entrada anterior de este documento lo daba como pendiente por
+  error; queda corregido acá.
+
+Si replicás este proyecto desde cero, el plan actualizado ya cubre esto desde el primer
+commit. Si seguís construyendo sobre este repo, el siguiente paso real (no de higiene)
+es la sección A: probarlo contra un caso de uso real.
+
 ## Lo que SÍ está hecho (para contexto)
 
 BUILD ORDER pasos 1–13 completos, browser (lectura + interactivo) del 14, y multi-worker +

@@ -121,6 +121,8 @@ keeps the whole loop runnable offline and is what the test suite exercises.
 | Browser domain (read + JS render) | 🟡 render via optional Playwright | `sandbox-browser` |
 | Interactive browser (navigate/click/type/screenshot) | ✅ wired (needs Playwright at runtime) | `sandbox-browser/session.ts` + agent loop |
 | Desktop automation (GUI control) | ❌ not yet | roadmap |
+| CI (build+lint+format+test gate on push/PR) | ✅ implemented | `.github/workflows/ci.yml` |
+| Linter / formatter | ✅ implemented | `eslint.config.mjs`, `.prettierrc.json` |
 
 ## Implementation contract
 
