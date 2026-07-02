@@ -42,6 +42,73 @@ describe('resolveInsideWorkspace (security invariant)', () => {
     });
 });
 
+/**
+ * Attempts a directory symlink (Windows junctions need no elevation; POSIX uses 'dir').
+ * Returns false if the platform refuses it (e.g. Windows without Developer Mode), so the
+ * symlink tests skip rather than fail on a permissions quirk.
+ */
+function trySymlinkDir(target: string, link: string): boolean {
+    try {
+        fs.symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+describe('resolveInsideWorkspace (symlink-aware invariant)', () => {
+    // These pin the one claim the current tests never exercised: a symlink INSIDE the
+    // workspace that points OUTSIDE it must not become an escape hatch. The whole reason
+    // resolveInsideWorkspace resolves realpath instead of a textual check.
+    it('rejects reading through a symlink that points outside the workspace', () => {
+        const outside = `${workspace}-outside`;
+        fs.mkdirSync(outside, { recursive: true });
+        fs.writeFileSync(path.join(outside, 'secret.txt'), 'top secret');
+        const linkInside = path.join(workspace, 'escape-link');
+        if (!trySymlinkDir(outside, linkInside)) {
+            console.warn('symlink no permitido en esta plataforma — test omitido');
+            fs.rmSync(outside, { recursive: true, force: true });
+            return;
+        }
+        try {
+            // Reading an existing file through the link must be denied...
+            expect(() => resolveInsideWorkspace(workspace, path.join('escape-link', 'secret.txt'))).toThrow(
+                SandboxEscapeError
+            );
+            // ...and so must the fsTools surface (returns the security message).
+            expect(fsTools.readFile(workspace, { filepath: 'escape-link/secret.txt' })).toContain('Error de Seguridad');
+        } finally {
+            fs.rmSync(linkInside, { recursive: true, force: true });
+            fs.rmSync(outside, { recursive: true, force: true });
+        }
+    });
+
+    it('rejects writing a NEW file through a symlink that points outside the workspace', () => {
+        const outside = `${workspace}-outside2`;
+        fs.mkdirSync(outside, { recursive: true });
+        const linkInside = path.join(workspace, 'escape-link2');
+        if (!trySymlinkDir(outside, linkInside)) {
+            console.warn('symlink no permitido en esta plataforma — test omitido');
+            fs.rmSync(outside, { recursive: true, force: true });
+            return;
+        }
+        try {
+            // The target file doesn't exist yet: resolution must still resolve the link's
+            // real target and deny, never plant a file outside the workspace.
+            expect(() => resolveInsideWorkspace(workspace, path.join('escape-link2', 'planted.txt'))).toThrow(
+                SandboxEscapeError
+            );
+            expect(fsTools.writeFile(workspace, { filepath: 'escape-link2/planted.txt', content: 'x' })).toContain(
+                'Error de Seguridad'
+            );
+            expect(fs.existsSync(path.join(outside, 'planted.txt'))).toBe(false);
+        } finally {
+            fs.rmSync(linkInside, { recursive: true, force: true });
+            fs.rmSync(outside, { recursive: true, force: true });
+        }
+    });
+});
+
 describe('fsTools', () => {
     it('writes and reads a file inside the workspace', () => {
         const write = fsTools.writeFile(workspace, { filepath: 'notes/hello.txt', content: 'hola' });
