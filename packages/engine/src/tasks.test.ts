@@ -81,7 +81,7 @@ describe('$-sequence safety (task text is untrusted: goal.md + LLM decomposition
     // `String.prototype.replace`'s 2nd arg treats `$&`, `$$`, `` $` `` and `$'` as match
     // references. Task text carrying those must survive verbatim into tasks.md, never get
     // duplicated/mutilated — this is the OS's central filesystem-state contract.
-    const NASTY = 'Cobrar $5 y usar $& $$ $` $\' literalmente';
+    const NASTY = "Cobrar $5 y usar $& $$ $` $' literalmente";
 
     it('markTaskDone preserves $ sequences in the task line', () => {
         const src = `## [now]\n- [ ] ${NASTY}\n`;

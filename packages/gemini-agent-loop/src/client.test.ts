@@ -88,7 +88,10 @@ describe('withBackoff', () => {
 
     it('honors Retry-After as a floor for the wait', async () => {
         const { sleep, waits } = spySleep();
-        const fn = vi.fn().mockRejectedValueOnce(apiError(429, { 'retry-after': '30' })).mockResolvedValue('ok');
+        const fn = vi
+            .fn()
+            .mockRejectedValueOnce(apiError(429, { 'retry-after': '30' }))
+            .mockResolvedValue('ok');
         await expect(withBackoff(fn, { sleep })).resolves.toBe('ok');
         expect(waits[0]).toBeGreaterThanOrEqual(30_000);
     });

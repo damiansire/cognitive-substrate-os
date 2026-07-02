@@ -242,7 +242,6 @@ describe('unknown routes', () => {
     });
 });
 
-
 describe('GET /api/workspaces/:project/kpis', () => {
     it('returns real KPIs derived from runs on disk', async () => {
         const project = path.basename(root);

@@ -56,7 +56,9 @@ describe('executeTaskWithLLM — core loop (via injected chat, no API)', () => {
         expect(fs.readFileSync(path.join(ws, 'out.txt'), 'utf8')).toBe('hola');
         // First message is the task; second is the functionResponse parts (not stringified).
         expect(typeof received[0]).toBe('string');
-        const secondMsg = received[1] as Array<{ functionResponse?: { name?: string; response?: { output?: string } } }>;
+        const secondMsg = received[1] as Array<{
+            functionResponse?: { name?: string; response?: { output?: string } };
+        }>;
         expect(Array.isArray(secondMsg)).toBe(true);
         expect(secondMsg[0]?.functionResponse?.name).toBe('writeFile');
         expect(secondMsg[0]?.functionResponse?.response?.output).toContain('Success');

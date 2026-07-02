@@ -63,11 +63,7 @@ export function requireTokenAuth(env: Env = process.env): string | null {
  * the request must carry it in the `x-csos-token` header. Non-mutating methods (GET,
  * OPTIONS) are always allowed.
  */
-export function isAuthorizedPost(
-    method: string,
-    header: string | string[] | undefined,
-    token: string | null
-): boolean {
+export function isAuthorizedPost(method: string, header: string | string[] | undefined, token: string | null): boolean {
     if (method !== 'POST') return true;
     if (!token) return true;
     const presented = Array.isArray(header) ? header[0] : header;

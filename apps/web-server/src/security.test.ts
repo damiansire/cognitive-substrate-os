@@ -1,11 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-    resolveHost,
-    resolveAllowedOrigins,
-    corsHeaders,
-    requireTokenAuth,
-    isAuthorizedPost
-} from './security';
+import { resolveHost, resolveAllowedOrigins, corsHeaders, requireTokenAuth, isAuthorizedPost } from './security';
 
 describe('resolveHost', () => {
     it('defaults to loopback', () => {
