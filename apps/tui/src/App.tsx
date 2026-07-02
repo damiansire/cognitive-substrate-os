@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import { resolveApprovalAction, handleAsk, type AskOutcome } from '@cognitive-substrate/engine';
 import type { ResolveInput } from '@cognitive-substrate/governance';

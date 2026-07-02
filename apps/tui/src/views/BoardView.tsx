@@ -1,4 +1,3 @@
-import React from 'react';
 import { Box, Text } from 'ink';
 import type { WorkspaceSnapshot } from '../data.js';
 import type { BoardTask, QueueName } from '@cognitive-substrate/engine';

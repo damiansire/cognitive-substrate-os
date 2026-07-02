@@ -6,6 +6,12 @@ artifacts
 evals-report
 apps/presentation
 package-lock.json
+# Angular build/test caches and outputs (generated)
+.angular
+apps/web/dist
+# Audit reports are git-excluded artifacts, not source
+_audits
+_audit
 
 # Prose formatting is cosmetic/subjective and out of scope for pipeline hygiene
 *.md

@@ -11,7 +11,9 @@
     "skipLibCheck": true,
     "declaration": true,
     "declarationMap": true,
-    "noUncheckedIndexedAccess": true
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "exclude": ["**/*.test.ts", "**/*.test.tsx", "**/dist/**", "node_modules"]
 }

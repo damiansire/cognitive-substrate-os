@@ -9,11 +9,14 @@ export interface SkillMetadata {
     path: string;
 }
 
-export function parseFrontmatter(fileContent: string): any {
+/** Parsed YAML frontmatter as an untyped map (the file is untrusted, so callers must
+ * narrow each field). Null when there's no frontmatter block or it isn't a YAML mapping. */
+export function parseFrontmatter(fileContent: string): Record<string, unknown> | null {
     const match = fileContent.match(/^---\n([\s\S]*?)\n---/);
     if (match && match[1]) {
         try {
-            return yaml.parse(match[1]);
+            const parsed = yaml.parse(match[1]) as unknown;
+            return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
         } catch {
             return null;
         }
@@ -43,12 +46,10 @@ function scanSkillsDirectory(dirPath: string): SkillMetadata[] {
             if (fs.existsSync(skillMdPath)) {
                 const content = fs.readFileSync(skillMdPath, 'utf8');
                 const meta = parseFrontmatter(content);
-                if (meta && meta.name && meta.description) {
-                    skills.push({
-                        name: meta.name,
-                        description: meta.description,
-                        path: skillMdPath
-                    });
+                const name = meta?.['name'];
+                const description = meta?.['description'];
+                if (typeof name === 'string' && typeof description === 'string') {
+                    skills.push({ name, description, path: skillMdPath });
                 }
             }
         }
