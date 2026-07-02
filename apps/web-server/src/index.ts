@@ -97,32 +97,53 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
-    if (tryHandleEvents(req, res, url.pathname)) return;
+    // Error boundary: an exception from the read-model must become a 500, never crash the
+    // process or hang the connection open.
+    try {
+        const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+        if (tryHandleEvents(req, res, url.pathname)) return;
 
-    // State-changing POSTs require the local token when one is configured.
-    if (!isAuthorizedPost(req.method ?? 'GET', req.headers['x-csos-token'], AUTH_TOKEN)) {
-        res.writeHead(401, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: 'no autorizado: falta o no coincide x-csos-token' }));
-        return;
+        // State-changing POSTs require the local token when one is configured.
+        if (!isAuthorizedPost(req.method ?? 'GET', req.headers['x-csos-token'], AUTH_TOKEN)) {
+            res.writeHead(401, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ error: 'no autorizado: falta o no coincide x-csos-token' }));
+            return;
+        }
+
+        const body = req.method === 'POST' ? await readBody(req) : undefined;
+        const { status, payload } = await handleApiRequest(
+            ROOT_DIR,
+            req.method ?? 'GET',
+            url.pathname,
+            url.searchParams,
+            body
+        );
+
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(payload));
+    } catch (err) {
+        console.error(`>>> [web-server] Error no manejado en ${req.method} ${req.url}:`, err);
+        if (!res.headersSent) {
+            res.writeHead(500, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ error: 'error interno del servidor' }));
+        } else {
+            res.end();
+        }
     }
-
-    const body = req.method === 'POST' ? await readBody(req) : undefined;
-    const { status, payload } = await handleApiRequest(
-        ROOT_DIR,
-        req.method ?? 'GET',
-        url.pathname,
-        url.searchParams,
-        body
-    );
-
-    res.writeHead(status, { 'content-type': 'application/json' });
-    res.end(JSON.stringify(payload));
 });
 
 server.listen(PORT, HOST, () => {
     const authNote = AUTH_TOKEN ? ' · token requerido en POST' : '';
     console.log(`>>> [web-server] Escuchando en http://${HOST}:${PORT} (CSOS_ROOT=${ROOT_DIR})${authNote}`);
+});
+
+// Last-resort nets so a stray rejection/exception is logged instead of silently killing
+// the daemon (the per-request try/catch above is the primary boundary).
+process.on('unhandledRejection', (reason) => {
+    console.error('>>> [web-server] unhandledRejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+    console.error('>>> [web-server] uncaughtException:', err);
 });
 
 process.on('SIGINT', () => {

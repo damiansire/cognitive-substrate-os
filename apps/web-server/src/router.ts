@@ -78,6 +78,24 @@ export async function handleApiRequest(
     query: URLSearchParams,
     body: unknown
 ): Promise<ApiResponse> {
+    // Error boundary at the pure-router layer: any exception from the read-model becomes a
+    // 500 instead of a rejected promise that would crash the process / hang the socket.
+    // Living here (not only in index.ts) keeps it covered by the router unit tests.
+    try {
+        return await dispatchApiRequest(rootDir, method, pathname, query, body);
+    } catch (err) {
+        console.error(`[web-server] error interno en ${method} ${pathname}:`, err);
+        return { status: 500, payload: { error: 'error interno del servidor' } };
+    }
+}
+
+async function dispatchApiRequest(
+    rootDir: string,
+    method: string,
+    pathname: string,
+    query: URLSearchParams,
+    body: unknown
+): Promise<ApiResponse> {
     const segments = pathname.split('/').filter(Boolean);
 
     if (segments[0] === 'api' && segments.length === 2 && segments[1] === 'departments') {
