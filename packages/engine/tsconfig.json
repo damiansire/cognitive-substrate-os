@@ -19,6 +19,9 @@
     },
     {
       "path": "../governance"
+    },
+    {
+      "path": "../skills-parser"
     }
   ]
 }

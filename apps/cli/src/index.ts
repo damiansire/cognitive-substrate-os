@@ -11,6 +11,7 @@ import {
     buildTasksScaffold,
     type WorkspaceResult
 } from '@cognitive-substrate/engine';
+import { cmdStatus, cmdInbox, cmdBoard, cmdSession, cmdApprove, cmdAsk } from './commands';
 
 dotenv.config();
 
@@ -171,9 +172,63 @@ async function runDaemonCli(): Promise<void> {
     console.log('>>> [Daemon] Detenido limpiamente.');
 }
 
+const KNOWN_COMMANDS = new Set(['status', 'inbox', 'board', 'session', 'approve', 'ask']);
+
+/** Dispatches the real subcommands (status/inbox/board/session/approve/ask). */
+async function runCommand(sub: string, rest: string[]): Promise<void> {
+    const rootDir = process.cwd();
+    switch (sub) {
+        case 'status':
+            cmdStatus(rootDir);
+            return;
+        case 'inbox':
+            cmdInbox(rootDir);
+            return;
+        case 'board':
+            cmdBoard(rootDir);
+            return;
+        case 'session':
+            cmdSession(rootDir, rest[0]);
+            return;
+        case 'approve': {
+            const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+            try {
+                await cmdApprove(rootDir, rest[0], (q) => promptAsync(rl, q));
+            } finally {
+                rl.close();
+            }
+            return;
+        }
+        case 'ask': {
+            const text = rest.join(' ').trim();
+            if (!text) {
+                console.log('Uso: cognitive-os ask "<texto en lenguaje natural>"');
+                return;
+            }
+            const result = await cmdAsk(rootDir, text);
+            if (result.message) console.log(result.message);
+            if (result.interpretation) {
+                console.log(
+                    `   (interpretado como: ${result.interpretation.verb} / ${result.interpretation.mode}, confianza ${result.interpretation.confidence.toFixed(2)})`
+                );
+            }
+            return;
+        }
+    }
+}
+
 if (require.main === module) {
-    const isDaemon = process.argv.includes('--daemon');
-    (isDaemon ? runDaemonCli() : runEngine()).catch((e) => {
+    const argv = process.argv.slice(2);
+    const sub = argv[0];
+
+    const run =
+        sub && KNOWN_COMMANDS.has(sub)
+            ? runCommand(sub, argv.slice(1))
+            : argv.includes('--daemon')
+              ? runDaemonCli()
+              : runEngine();
+
+    run.catch((e) => {
         console.error('>>> [Fatal]:', e);
         process.exit(1);
     });

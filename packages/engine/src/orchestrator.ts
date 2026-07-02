@@ -11,7 +11,15 @@ import { getWorkerId } from './claims';
 import { createClaimBackend } from './coordination';
 import { loadPolicy } from '@cognitive-substrate/governance';
 import { recordRun } from './evidence';
-import { parseTasks, markTaskDone, markTaskFailed, addImproveTask, appendTasksToNow } from './tasks';
+import {
+    parseTasks,
+    markTaskDone,
+    markTaskFailed,
+    markTaskAwaitingApproval,
+    addImproveTask,
+    appendTasksToNow,
+    extractTaskId
+} from './tasks';
 import type { WorkspaceResult } from './types';
 
 const GOAL_FILE = 'goal.md';
@@ -123,6 +131,23 @@ async function runClaimedTask(
     const coreMemory = `Proyecto: ${project}\n`;
     const execution = await executeTaskWithLLM(workspacePath, activeTask, coreMemory);
 
+    // A dangerous command was deferred to a human (governance mode 'defer'): the task
+    // isn't done and it isn't a failure either — it's paused. Skip verify/evidence/
+    // learning/incidents entirely; the audit trail already lives in the PendingApproval
+    // itself (`approvals.json`) plus the tool-call audit log.
+    if (execution.awaitingApproval) {
+        const { approvalId } = execution.awaitingApproval;
+        const summary = `[${project}] ⏸️ Esperando aprobación humana (id: ${approvalId}): ${activeTask.trim()}`;
+        if (origin === 'recurring') {
+            // Left untouched under [recurring] — idempotent request() means retrying
+            // next cadence won't spam duplicate pending approvals.
+            return { project, pendingNow, run: null, incidents: countIncidents(workspacePath), summary };
+        }
+        const tasksContent = markTaskAwaitingApproval(fs.readFileSync(tasksPath, 'utf8'), activeTask, approvalId);
+        fs.writeFileSync(tasksPath, tasksContent, 'utf8');
+        return { project, pendingNow, run: null, incidents: countIncidents(workspacePath), summary };
+    }
+
     const verdict = await verifyTask(workspacePath, activeTask, execution.log, execution.success);
     const learning = await distillLearning(activeTask, verdict, execution.log);
     const finishedAt = clock();
@@ -135,7 +160,8 @@ async function runClaimedTask(
         executionSuccess: execution.success,
         verdict,
         log: execution.log,
-        learning
+        learning,
+        taskId: extractTaskId(activeTask) ?? undefined
     });
 
     appendLearning(workspacePath, learning, finishedAt);
