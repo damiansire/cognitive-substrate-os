@@ -17,12 +17,41 @@ import {
 import * as path from 'path';
 
 import { recordLlmCall } from './metrics';
+import { withBackoff, isRetryableError } from './client';
 
 export { generateJson, hasApiKey, DEFAULT_MODEL } from './client';
 export { getLlmCalls, resetLlmCalls, recordLlmCall } from './metrics';
 
 const MAX_TOOL_ITERATIONS = 15;
-const MAX_BACKOFF_ATTEMPTS = 3;
+
+/** One model function-call as the loop consumes it (a structural subset of the SDK's). */
+export interface AgentFunctionCall {
+    id?: string;
+    name?: string;
+    args?: unknown;
+}
+
+/** The model response shape the loop reads. */
+export interface AgentResponse {
+    text?: string;
+    functionCalls?: AgentFunctionCall[];
+}
+
+/** The minimal chat surface `executeTaskWithLLM` drives — satisfied by the real Gemini
+ * `Chat`, and by a scripted fake in tests. This is the dependency seam that lets the core
+ * loop (functionResponse reinjection, budget cutoff, backoff, defer pause) be exercised
+ * without a network or an API key. */
+export interface ChatLike {
+    sendMessage(input: { message: PartListUnion }): Promise<AgentResponse>;
+}
+
+/** Injectable dependencies for `executeTaskWithLLM`. When `createChat` is provided the
+ * function runs the REAL loop against it (bypassing the simulation-mode early return), and
+ * `sleep` lets tests drive backoff without real waits. */
+export interface ExecuteDeps {
+    createChat?: (systemInstruction: string) => ChatLike;
+    sleep?: (ms: number) => Promise<void>;
+}
 
 /** Result of a dispatched tool call: the text to feed back to the model, plus an
  * optional signal that the whole task must pause for human approval right now. */
@@ -165,16 +194,20 @@ export async function dispatchTool(
 export async function executeTaskWithLLM(
     workspacePath: string,
     task: string,
-    coreMemory: string
+    coreMemory: string,
+    deps: ExecuteDeps = {}
 ): Promise<{ success: boolean; log: string; awaitingApproval?: { approvalId: string; command: string } }> {
-    if (!process.env['GEMINI_API_KEY'] || process.env['GEMINI_API_KEY'].includes('tu_clave_aqui')) {
+    // Simulation mode: only when NO chat factory is injected AND there's no usable key.
+    // An injected `createChat` (tests) always runs the real loop.
+    const keyMissing = !process.env['GEMINI_API_KEY'] || process.env['GEMINI_API_KEY'].includes('tu_clave_aqui');
+    if (!deps.createChat && keyMissing) {
         console.warn(`>>> [LLM] GEMINI_API_KEY no válida. Simulación activada para ${workspacePath}`);
         return { success: true, log: 'Simulated success (No API Key)' };
     }
 
     const policy = loadPolicy(workspacePath);
     const budget = new Budget(policy);
-    const ai = new GoogleGenAI({ apiKey: process.env['GEMINI_API_KEY'] });
+    const sleep = deps.sleep;
     const availableSkills = discoverSkills(workspacePath);
     const skillsListText = availableSkills.map((s) => `- ${s.name}: ${s.description} (path: ${s.path})`).join('\n');
 
@@ -218,16 +251,23 @@ Sigue estos pasos estrictamente:
 
     console.log(`>>> [LLM] Delegando tarea en workspace ${workspacePath}: ${task}`);
 
-    let chat;
-    try {
-        chat = ai.chats.create({
-            model: 'gemini-2.5-flash',
-            config: {
-                systemInstruction: systemInstruction,
-                tools: [{ functionDeclarations: toolDeclarations as any }],
-                temperature: 0.2
-            }
+    const createChat =
+        deps.createChat ??
+        ((sys: string): ChatLike => {
+            const ai = new GoogleGenAI({ apiKey: process.env['GEMINI_API_KEY'] });
+            return ai.chats.create({
+                model: 'gemini-2.5-flash',
+                config: {
+                    systemInstruction: sys,
+                    tools: [{ functionDeclarations: toolDeclarations as any }],
+                    temperature: 0.2
+                }
+            }) as unknown as ChatLike;
         });
+
+    let chat: ChatLike;
+    try {
+        chat = createChat(systemInstruction);
     } catch (e: any) {
         return { success: false, log: `Error inicializando chat: ${e.message}` };
     }
@@ -239,8 +279,7 @@ Sigue estos pasos estrictamente:
 
     try {
         for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-            let response;
-            let attempts = 0;
+            let response: AgentResponse | undefined;
 
             // Bounded autonomy: stop if the per-task model budget is exhausted.
             if (!budget.canCallLlm()) {
@@ -248,30 +287,27 @@ Sigue estos pasos estrictamente:
                 break;
             }
 
-            // Exponential Backoff implementation (G-Staff Pattern)
-            while (attempts < MAX_BACKOFF_ATTEMPTS) {
-                try {
-                    recordLlmCall();
-                    budget.recordLlm();
-                    response = await chat.sendMessage({ message: nextMessage });
-                    break;
-                } catch (apiError: any) {
-                    attempts++;
-                    const status = apiError.status || 500;
-                    if (status === 429 || status === 503) {
-                        if (attempts >= MAX_BACKOFF_ATTEMPTS) {
-                            return {
-                                success: false,
-                                log: log + `\nError Crítico: Falla de Red/Rate Limit persistente (${status}).`
-                            };
-                        }
-                        const waitTime = Math.pow(2, attempts) * 1000;
-                        console.warn(`>>> [LLM] Rate Limit (${status}) detectado. Reintentando en ${waitTime}ms...`);
-                        await new Promise((resolve) => setTimeout(resolve, waitTime));
-                    } else {
-                        throw apiError;
-                    }
+            // Retry transient errors with jitter/Retry-After (shared withBackoff, same
+            // policy as client.ts). A persistent rate-limit ends the task gracefully; any
+            // non-retryable error propagates to the outer catch.
+            try {
+                response = await withBackoff(
+                    () => {
+                        recordLlmCall();
+                        budget.recordLlm();
+                        return chat.sendMessage({ message: nextMessage });
+                    },
+                    sleep ? { sleep } : {}
+                );
+            } catch (apiError: unknown) {
+                if (isRetryableError(apiError)) {
+                    const status = (apiError as { status?: number })?.status;
+                    return {
+                        success: false,
+                        log: log + `\nError Crítico: Falla de Red/Rate Limit persistente (${status}).`
+                    };
                 }
+                throw apiError;
             }
 
             if (!response) break;
