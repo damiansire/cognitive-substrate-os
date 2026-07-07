@@ -58,3 +58,7 @@ CLAUDE.md
 CLAUDE.local.md
 .mcp.json
 claude-scratch-*
+
+# Artefactos de Fragua (no versionar)
+_audit/
+_audits/
